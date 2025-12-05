@@ -1,0 +1,22 @@
+insulin_type: "fiasp"
+iob_model: "walsh"
+DIA: 300
+
+# Basal parameters - more conservative
+basal_nominal: 0.70  # Reduced from 0.8
+basal_max: 1.0
+
+# Bolus parameters - safer for variable sensitivity
+CR: 23  # Increased from 20 (less aggressive)
+CF_base: 52  # Increased from 40 (more conservative)
+target: 125  # Slightly lower from 130 for better overall control
+max_bolus: 18.0  # Slightly reduced for safety
+
+# Safety parameters
+iob_excess_threshold: 2.5  # Increased tolerance
+aggression_min: 0.25
+
+# PID tuning - balanced responsiveness and safety
+Kp: 0.0035  # Reduced for less aggressive response
+Ki: 0.00001  # Reduced to prevent accumulation
+Kd: 0.017  # Slightly reduced dampening

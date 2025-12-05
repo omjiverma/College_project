@@ -1,0 +1,21 @@
+patient: 1
+insulin_type: "fiasp"
+iob_model: "walsh"
+DIA: 300  # Faster-acting insulin, DIA typically 4-5 hours
+
+basal_nominal: 0.6  # Higher than adults; accounts for insulin resistance
+basal_max: 1.0    # More aggressive ceiling for adolescent variability
+
+# Bolus parameters
+CR: 25  # Carb ratio: 8g per 1U (more aggressive than adults due to resistance)
+CF_base: 40  # Correction factor: 40 mg/dL per 1U (less sensitive than adults)
+target: 130  # Slightly higher target for safety buffer; adolescents more prone to lows
+max_bolus: 20.0  # Higher max bolus for larger meals/snacks
+
+
+iob_excess_threshold: 2.0  # Slightly higher IOB tolerance
+aggression_min: 0.25  # Minimum controller aggression
+
+Kp: 0.004  # Proportional: increased from adult (0.005) for faster response
+Ki: 0.000012  # Integral: increased slightly for better correction accumulation
+Kd: 0.018  # Derivative: increased to dampen overshoot from swings
