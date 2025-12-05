@@ -1,0 +1,29 @@
+# Patient 002 - IOB* optimized profile
+insulin_type: fiasp
+DIA: 300
+
+# Optional: IOB* parameters (defaults provided)
+iob_star_k_a1: 0.0347
+iob_star_k_a2: 0.0069
+iob_star_k_d: 0.0347
+iob_star_p1: 0.8
+
+# Basal
+basal_nominal: 0.5
+basal_max: 1.8
+
+# Meal/Correction
+CR: 22                   
+CF_base: 50              
+target: 145
+
+
+iob_excess_threshold: 1.5   
+# Safety
+max_bolus: 12.0
+aggression_min: 0.20
+
+# PID
+Kp: 0.0030
+Ki: 0.000012
+Kd: 0.018

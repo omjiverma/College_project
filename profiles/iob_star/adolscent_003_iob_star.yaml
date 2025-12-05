@@ -1,0 +1,32 @@
+# Patient 003 - IOB* Ultra-Conservative Profile v1.0
+# EXTREME insulin sensitivity - requires maximum caution
+
+insulin_type: fiasp
+DIA: 300
+
+# IOB* parameters
+iob_star_k_a1: 0.0347
+iob_star_k_a2: 0.0069
+iob_star_k_d: 0.0347
+iob_star_p1: 0.8
+
+# Basal - ULTRA-LOW
+basal_nominal: 0.08
+basal_max: 0.5
+
+# Meal/Correction - VERY CONSERVATIVE
+CR: 40
+CF_base: 65
+target: 160
+
+# IOB suppression - VERY AGGRESSIVE
+iob_excess_threshold: 0.8
+
+# Safety - MAXIMUM RESTRICTIONS
+max_bolus: 6.0
+aggression_min: 0.30
+
+# PID - GENTLE AND CAUTIOUS
+Kp: 0.0018
+Ki: 0.000006
+Kd: 0.025

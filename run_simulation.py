@@ -12,14 +12,14 @@ import pandas as pd
 from scenario.fixed_daily_meals import create_fixed_meal_scenario
 from simglucose.controller.basal_bolus_ctrller import BBController as BBController
 from controller import T1DControllerWalsh as Controller
-
+from controller_iob_star import T1DControllerIOBStar
 # Load profile
-with open("profiles/adolescent_005.yaml") as f:
+with open("profiles/iob_star/adolscent_003_iob_star.yaml") as f:
     PROFILE = yaml.safe_load(f)
 
-patients = [f"adolescent#{i:03d}" for i in range(5,6)]
+patients = [f"adolescent#{i:03d}" for i in range(3,4)]
 animate = False
-days = 7
+days = 2
 summary_rows = []
 
 for idx, name in enumerate(patients, 1):
@@ -33,11 +33,12 @@ for idx, name in enumerate(patients, 1):
     logger = PatientLogger(patient_name=name, save_path="results")
 
     env = T1DSimEnv(patient, sensor, pump, scenario)
-    controller = Controller(PROFILE, logger=logger)
-    BController = BBController()
+    # controller = Controller(PROFILE, logger=logger)
+    # BController = BBController()
+    controller_iob_star = T1DControllerIOBStar(PROFILE,logger=logger)
 
     sim_obj = SimObj(
-        env, controller,
+        env, controller_iob_star,
         timedelta(days=days),
         animate=animate,
         path='results'  # still used by simglucose for its own plots (optional)
