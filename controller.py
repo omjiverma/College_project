@@ -1,3 +1,7 @@
+# controller.py
+# T1DControllerWalsh with safe MPC-light integrated
+# Based on original controller implementation. :contentReference[oaicite:1]{index=1}
+
 from simglucose.controller.base import Controller, Action
 from utils.logging import PatientLogger
 
@@ -16,11 +20,7 @@ class T1DControllerWalsh(Controller):
       - Meal + correction boluses
       - Super Micro Boluses (SMB)
       - Hypoglycemia safety
-    
-    CRITICAL FIX: SimGlucose pump directly injects basal value per timestep!
-    - Controller returns basal in UNITS (not U/hr)
-    - This is the actual amount injected over the 3-minute period
-    - Conversion: basal_per_step = (desired_U_per_hr / 60) * dt_min
+      - MPC-light predictive correction (safe defaults / caps)
     """
 
     def __init__(self, profile: dict, logger: PatientLogger = None):
@@ -33,6 +33,15 @@ class T1DControllerWalsh(Controller):
         self.insulin_history: List[List[float]] = []  # [age_min, insulin_U]
         self.iob = 0.0
         self.sample_time = 3.0  # Fixed 3-minute steps
+
+        # Tuneable MPC parameters (can be placed in profile)
+        # mpc_horizon: minutes ahead to project (default 30)
+        # mpc_immediate_fraction: fraction of predicted bolus to deliver as immediate basal (this 3-min step)
+        self.mpc_horizon = float(self.p.get("mpc_horizon", 30.0))
+        self.mpc_immediate_fraction = float(self.p.get("mpc_immediate_fraction", 0.25))
+        # Safety caps (also read from profile)
+        self.mpc_max_bolus = float(self.p.get("mpc_max_bolus", 1.0))
+        self.mpc_enable = bool(self.p.get("mpc_enable", True))
 
     # ====================== WALSH IOB MODEL ======================
     def _iob_walsh(self) -> float:
@@ -90,6 +99,17 @@ class T1DControllerWalsh(Controller):
         x = np.arange(len(recent)) * self.sample_time
         slope = np.polyfit(x, recent, 1)[0]
         return slope
+
+    # Optional small smoother to stabilize trend (keeps behaviour similar to original)
+    def _filtered_trend(self) -> float:
+        if len(self.glucose_hist) < 6:
+            return self._trend_mgdl_per_min()
+        # small weighted smoothing to reduce noise
+        window = np.array(self.glucose_hist[-6:])
+        weights = np.array([1, 2, 3, 3, 2, 1], dtype=float)
+        smoothed = np.dot(window, weights)/weights.sum()
+        raw = self.glucose_hist[-1]
+        return (raw - smoothed) / self.sample_time
 
     # ====================== DYNAMIC AGGRESSION ======================
     def _compute_aggression(self, cgm: float, trend: float) -> float:
@@ -169,7 +189,6 @@ class T1DControllerWalsh(Controller):
         carb_bolus = cho / CR
 
         # Correction bolus with dynamic CF
-        # FIXED: Lower CF = more aggressive (divide by aggression)
         CF_adjusted = self.p["CF_base"] / max(aggression, 0.1)
         
         target = self.p["target"]
@@ -212,7 +231,6 @@ class T1DControllerWalsh(Controller):
             return 0.0, 0.0
 
         # Reduce basal to compensate (in U for this 3-min step)
-        # smb is in U, so reduce basal proportionally
         basal_reduction = smb * 0.6  # Reduce by 60% of SMB amount
         
         return smb, basal_reduction
@@ -268,12 +286,16 @@ class T1DControllerWalsh(Controller):
         if info.get("new_episode", False):
             self.reset()
             if self.logger:
-                self.logger.__init__(self.logger.patient_name)
+                # re-init logger if present
+                try:
+                    self.logger.__init__(self.logger.patient_name)
+                except Exception:
+                    pass
             logging.info("New episode -> Controller reset.")
 
         # Extract current state
         cgm = float(observation.CGM)
-        cho = info['meal']
+        cho = info.get('meal', 0.0)
         time = info.get("time", datetime.now())
         step = info.get("step", 0)
 
@@ -282,7 +304,12 @@ class T1DControllerWalsh(Controller):
         if len(self.glucose_hist) > 200:
             self.glucose_hist.pop(0)
 
-        trend = self._trend_mgdl_per_min()
+        # Use filtered trend for robustness
+        trend = self._filtered_trend()
+
+        # Setup default MPC debug vars (always defined for logging)
+        G_pred = cgm
+        mpc_bolus = 0.0
 
         # Emergency hypoglycemia shutdown
         if cgm < 65:
@@ -293,9 +320,44 @@ class T1DControllerWalsh(Controller):
             error = cgm - self.p["target"]
             aggression = self._compute_aggression(cgm, trend)
 
-            # Compute basal (U per 3-min step)
+            # Compute PID basal (U per 3-min step)
             basal = self._compute_pid_basal(error, trend, aggression)
             
+            # ------------------ SAFE MPC-LIGHT predictive correction ------------------
+            # Read profile-supplied CF_base and MPC settings (with safe defaults)
+            CF_base = float(self.p.get("CF_base", self.p.get("CF", 10.0)))
+            mpc_enabled = bool(self.p.get("mpc_enable", self.mpc_enable))
+            mpc_frac = float(self.p.get("mpc_immediate_fraction", self.mpc_immediate_fraction))
+            # clamp fraction
+            mpc_frac = float(np.clip(mpc_frac, 0.0, 0.4))
+            mpc_max_bolus = float(self.p.get("mpc_max_bolus", self.mpc_max_bolus))
+            mpc_horizon = float(self.p.get("mpc_horizon", self.mpc_horizon))
+
+            # Criteria: only apply MPC when glucose is above target and rising (reduces hypo risk)
+            if mpc_enabled and (cgm > self.p["target"]) and (trend > 0.0):
+                # Mild IOB attenuation: safer than a large subtraction for long DIA
+                IOB_effect = self.iob * (CF_base * 0.10)  # 10% of IOB*CF as BG offset
+
+                # Predict BG H minutes ahead
+                G_pred = cgm + trend * mpc_horizon - IOB_effect
+
+                # Predict required bolus to bring predicted BG to target
+                mpc_bolus = max(0.0, (G_pred - self.p["target"]) / max(CF_base, 1e-6))
+
+                # Safety cap on predicted bolus
+                mpc_bolus = float(min(mpc_bolus, max(0.0, mpc_max_bolus)))
+
+                # Convert a fraction to immediate basal (U delivered during this 3-min step)
+                mpc_to_basal_U = mpc_bolus * mpc_frac
+
+                # Add conservatively to the PID basal (basal is U for this 3-min step)
+                basal = float(max(0.0, basal + mpc_to_basal_U))
+            else:
+                # MPC inactive for safety or inappropriate BG/trend state
+                G_pred = cgm
+                mpc_bolus = 0.0
+            # ------------------ end SAFE MPC-LIGHT ------------------
+
             # Compute meal/correction bolus (U)
             bolus = self._compute_meal_bolus(cho, cgm, aggression)
 
@@ -317,18 +379,26 @@ class T1DControllerWalsh(Controller):
         basal_u_hr = (action.basal / dt_min) * 60.0
         
         if self.logger:
-            self.logger.log_step(
-                step=step,
-                time=time,
-                cgm=cgm,
-                basal=basal_u_hr,  # Log as U/hr for human readability
-                bolus=action.bolus,
-                iob=self.iob,
-                iob_model="WALSH",
-                cho=cho,
-                aggression=aggression,
-                trend=trend,
-                target=self.p["target"],
-            )
+            # include mpc fields for debugging/tuning
+            try:
+                self.logger.log_step(
+                    step=step,
+                    time=time,
+                    cgm=cgm,
+                    basal=basal_u_hr,  # Log as U/hr for human readability
+                    bolus=action.bolus,
+                    iob=self.iob,
+                    iob_model="WALSH+MPC",
+                    cho=cho,
+                    aggression=aggression,
+                    trend=trend,
+                    target=self.p["target"],
+                    mpc_predicted_bg=round(float(G_pred), 2),
+                    mpc_bolus=round(float(mpc_bolus), 4),
+                    mpc_immediate_fraction=round(float(self.p.get("mpc_immediate_fraction", self.mpc_immediate_fraction)), 3),
+                )
+            except Exception:
+                # Logging should never break the controller
+                logging.exception("Logger failed in controller.policy()")
 
         return action

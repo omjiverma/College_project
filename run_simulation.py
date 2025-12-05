@@ -14,10 +14,10 @@ from simglucose.controller.basal_bolus_ctrller import BBController as BBControll
 from controller import T1DControllerWalsh as Controller
 
 # Load profile
-with open("profiles/adolescent_005.yaml") as f:
+with open("profiles/adult_7d.yaml") as f:
     PROFILE = yaml.safe_load(f)
 
-patients = [f"adolescent#{i:03d}" for i in range(5,6)]
+patients = [f"adult#{i:03d}" for i in range(1,6)]
 animate = False
 days = 7
 summary_rows = []
