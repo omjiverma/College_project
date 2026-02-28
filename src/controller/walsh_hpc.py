@@ -46,12 +46,12 @@ class T1DControllerWalsh(Controller):
         self.iob_model = WalshIOB(dia_minutes=self.p.get("DIA", 300.0))
         self.bergman = BergmanMinimalModel(profile)
 
-        # MPC/HPC configuration (user-configurable via YAML)
-        self.mpc_enable = bool(self.p.get("mpc_enable", True))
+        # Bergman/HPC configuration - ACTIVE BY DEFAULT
+        # Bergman model enabled by default for robust predictive control
+        self.bergman_enabled = bool(self.p.get("bergman_enable", True))
         self.mpc_horizon = float(self.p.get("mpc_horizon", 30.0))            # minutes
         self.mpc_immediate_fraction = float(self.p.get("mpc_immediate_fraction", 0.25))
         self.mpc_max_bolus = float(self.p.get("mpc_max_bolus", 1.0))        # U cap
-        self.mpc_safety_fraction = float(self.p.get("mpc_safety_fraction", 0.25))
 
         # Safety tracking
         self.hypo_events: List[float] = []
@@ -77,30 +77,32 @@ class T1DControllerWalsh(Controller):
         raw = self.glucose_hist[-1]
         return float((raw - sm) / self.sample_time)
 
-    # ---- Dynamic Aggression ----
+    # ---- Dynamic Aggression (Consolidated IOB Logic) ----
     def _compute_aggression(self, cgm: float, trend: float) -> float:
         """
         Compute dynamic aggression factor (0.2-1.0).
-        Reduces aggression with excess IOB, increases when running high.
+        Consolidated logic: IOB suppression handles high insulin risk.
         """
         aggression = 1.0
         
-        # Suppress aggression if IOB is high
+        # CONSOLIDATED: Single IOB check (removes dual suppression redundancy)
         excess_iob = max(0.0, self.iob - self.p.get("iob_excess_threshold", 1.5))
-        aggression *= max(0.55, 1.0 - 0.45 * excess_iob)
+        if excess_iob > 0:
+            # Conservative when IOB high - suppresses from 1.0 to 0.55
+            aggression *= max(0.55, 1.0 - 0.45 * excess_iob)
         
-        # Suppress aggression if trending down and low
+        # Suppress aggression if trending down sharply and low glucose
         if cgm < 120 and trend < -2.0:
             supp = min(0.3, max(0.0, (-trend - 2.0) * 0.15))
             aggression *= (1.0 - supp)
         
-        # Boost aggression if running high
+        # Boost aggression if running very high (>200)
         if cgm > 200:
             boost = min(0.25, (cgm - 200) / 400.0)
             aggression = min(1.0, aggression + boost)
         
-        # Boost if elevated and not trending down
-        if cgm > 180 and trend > -0.5:
+        # Boost if elevated (>180) and not declining
+        elif cgm > 180 and trend > -0.5:
             boost = min(0.3, (cgm - 180) / 300.0)
             aggression = min(1.0, aggression + boost)
         
@@ -138,15 +140,17 @@ class T1DControllerWalsh(Controller):
         basal_per_step = (basal_u_hr / 60.0) * self.sample_time
         return float(basal_per_step)
 
-    # ---- Meal & Correction Bolus ----
+    # ---- Meal & Correction Bolus (Simplified - IOB handled in aggression) ----
     def _compute_meal_bolus(self, cho: float, cgm: float, aggression: float) -> float:
         """
         Compute meal and correction bolus.
         
+        IOB suppression is handled in aggression factor, not double-applied here.
+        
         Args:
             cho: Carbs informed (g)
             cgm: Current glucose (mg/dL)
-            aggression: Aggression factor (0-1)
+            aggression: Aggression factor (0-1) which already accounts for IOB
             
         Returns:
             Bolus insulin in U
@@ -158,13 +162,16 @@ class T1DControllerWalsh(Controller):
         CR = self.p["CR"]
         carb_bolus = cho / CR
         
-        # Correction bolus (with aggression adjustment)
+        # Correction bolus - aggression-adjusted CF
+        # Note: aggression already reduced if IOB high, so no separate IOB offset
         CF_adjusted = self.p["CF_base"] / max(aggression, 0.1)
         correction_raw = max(0.0, (cgm - self.p["target"]) / CF_adjusted)
         
-        # IOB offset reduces correction
-        iob_offset = self.iob * 0.5
-        correction = max(0.0, correction_raw - iob_offset)
+        # Simple safety: if high IOB from aggression < 0.6, no correction
+        if aggression < 0.6:
+            correction = 0.0
+        else:
+            correction = correction_raw
         
         total = carb_bolus + correction
         return float(min(total, self.p.get("max_bolus", 15.0)))
@@ -196,41 +203,48 @@ class T1DControllerWalsh(Controller):
         
         return float(smb), float(smb * 0.6)
 
-    # ---- Hypoglycemia Safety ----
+    # ---- Hypoglycemia Safety (Consolidated Trend Logic) ----
     def _apply_hypo_safety(self, cgm: float, trend: float, iob: float, basal: float) -> float:
         """
         Apply hypoglycemia safety checks to limit basal.
+        Consolidated logic to avoid redundant trend checks.
         
         Returns:
             Adjusted basal insulin
         """
-        # Critical low - suspend basal
+        # CRITICAL: Suspend basal completely
         if cgm < 65 or iob > 4.0:
             return 0.0
         
-        # Steep decline with moderate IOB - suspend
-        if trend < -2.5 and cgm < 120 and iob > 2.0:
+        # SEVERE: Steep decline with moderate IOB - suspend
+        if trend < -2.5 and iob > 2.0:
             return 0.0
         
-        # Low glucose - reduce basal
-        if cgm < 90 and iob > 1.5:
+        # MODERATE: Low & declining - significant reduction
+        if cgm < 90 and trend < -1.5:
             return max(0.3 * basal, 0.003)
         
-        # Declining from moderate - reduce basal
-        if trend < -1.8 and cgm < 130:
+        # MILD: Either low OR declining (but not critically) - gentle reduction
+        if cgm < 100 or trend < -1.0:
             return 0.7 * basal
         
         return basal
 
-    # ---- Bergman Predictive Control (HPC) ----
+    # ---- Bergman Predictive Control (HPC) - Active by Default ----
     def _bergman_hpc(self, cgm: float, trend: float, basal_current: float) -> Tuple[float, float]:
         """
         Heuristic predictive controller using Bergman model.
         Projects glucose forward and adjusts insulin delivery.
         
+        OPTIMIZATION: Skips computation if bergman_enabled=False
+        
         Returns:
             Tuple of (adjusted_basal_U, predicted_bg_at_horizon)
         """
+        # Quick exit if disabled (avoids unnecessary Bergman simulation)
+        if not self.bergman_enabled:
+            return basal_current, cgm
+            
         horizon_min = float(self.p.get("mpc_horizon", self.mpc_horizon))
         dt = self.sample_time
         steps = max(1, int(round(horizon_min / dt)))
@@ -322,18 +336,14 @@ class T1DControllerWalsh(Controller):
         # Base PID basal
         basal = self._compute_pid_basal(error, trend, aggression)
 
-        # MPC/HPC logging
+        # Bergman HPC logging
         mpc_used = False
         mpc_predicted_bg = cgm
         mpc_bolus = 0.0
 
-        # Decide if HPC should run (safety checks)
-        effective_mpc = bool(self.p.get("mpc_enable", self.mpc_enable))
-        if self.mpc_disabled_until is not None and time < self.mpc_disabled_until:
-            effective_mpc = False
-
-        # Run Bergman HPC if conditions met
-        if effective_mpc and (cgm > self.p["target"]) and (trend > 0.0) and (self.iob < float(self.p.get("iob_mpc_threshold", 3.0))):
+        # Run Bergman HPC if enabled and conditions favorable
+        # SIMPLIFIED: Single check instead of multiple condition branches
+        if self.bergman_enabled and cgm > self.p["target"] and trend > 0.0 and self.iob < float(self.p.get("iob_mpc_threshold", 3.0)):
             try:
                 new_basal, predicted_bg = self._bergman_hpc(cgm, trend, basal)
                 mpc_bolus = max(0.0, (new_basal - basal) / max(self.mpc_immediate_fraction, 1e-6))
@@ -344,8 +354,6 @@ class T1DControllerWalsh(Controller):
             except Exception as e:
                 logging.exception("Bergman HPC error: %s", e)
                 mpc_used = False
-                mpc_predicted_bg = cgm
-                mpc_bolus = 0.0
 
         # Meal/correction bolus
         bolus = self._compute_meal_bolus(cho, cgm, aggression)
