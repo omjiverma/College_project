@@ -25,7 +25,7 @@ def main():
     # Simulate each patient
     for name in patients:
         logger = PatientLogger(patient_name=name, save_path="results")
-        result = runner.run_patient(name, logger, days=1, animate=False)
+        result = runner.run_patient(name, logger, days=7, animate=False)
         logger.save()
         summary_rows.append(logger.get_summary())
 

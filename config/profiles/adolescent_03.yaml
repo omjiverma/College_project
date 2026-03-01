@@ -1,33 +1,19 @@
-# ===== Basal Profile =====
-DIA: 300
-basal_nominal: 0.1
-basal_max: 0.5
+# adolescent_003.yaml - MINIMAL PROFILE
 
-# ===== Sensitivity =====
-CR: 65
-CF_base: 70
-target: 180
-max_bolus: 15.0
-
-# ===== PID / Safety =====
-iob_excess_threshold: 1.0
-aggression_min: 0.1   # slightly higher minimum → improves high BG control
+# ===== REQUIRED: PID Tuning =====
 Kp: 0.005
 Ki: 0.000008
 Kd: 0.015
 
-# ===== MPC / Bergman HPC =====
-mpc_enable: true
-mpc_horizon: 30
-mpc_immediate_fraction: 0.30
-mpc_max_bolus: 1.2
-mpc_safety_fraction: 0.25
-iob_mpc_threshold: 3.5
-mpc_hypo_count_threshold: 2
-mpc_hypo_window_min: 90
-mpc_disable_hours: 1.5
+# ===== REQUIRED: Core Insulin Settings =====
+basal_nominal: 0.1
+CR: 65
+CF_base: 70
+target: 180
 
-# ===== Bergman Model =====
+# ===== OPTIONAL: Override Defaults =====
+aggression_min: 0.1
+iob_excess_threshold: 1.0
 p1: 0.028
 p2: 0.025
 p3: 0.00005

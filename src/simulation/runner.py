@@ -6,6 +6,7 @@ from simglucose.sensor.cgm import CGMSensor
 from simglucose.actuator.pump import InsulinPump
 from simglucose.patient.t1dpatient import T1DPatient
 from simglucose.simulation.sim_engine import sim, SimObj
+from simglucose.simulation.scenario_gen import RandomScenario
 from src.scenarios import create_fixed_meal_scenario
 from src.utils.logging import PatientLogger
 
@@ -47,7 +48,8 @@ class SimulationRunner:
         patient = T1DPatient.withName(patient_name)
         sensor = CGMSensor.withName('Dexcom', seed=10)
         pump = InsulinPump.withName('Insulet')
-        scenario = create_fixed_meal_scenario(start_time=datetime(2025, 1, 1), days=days)
+        # scenario = create_fixed_meal_scenario(start_time=datetime(2025, 1, 1), days=days)
+        scenario = RandomScenario(start_time=datetime(2025, 1, 1), seed=1)
 
         # Create environment
         env = T1DSimEnv(patient, sensor, pump, scenario)

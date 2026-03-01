@@ -1,0 +1,37 @@
+# MINIMAL COMMON PROFILE
+# Only required parameters - all others use sensible defaults
+# Use this for all patients unless individual tuning is needed
+
+# ===== REQUIRED: PID Tuning =====
+Kp: 0.004      # Proportional gain
+Ki: 0.000006   # Integral gain
+Kd: 0.012      # Derivative gain
+
+# ===== REQUIRED: Core Insulin Settings =====
+basal_nominal: 0.5   # Nominal basal rate (U/hr)
+CR: 40              # Carb ratio (g/U)
+CF_base: 50         # Correction factor (mg/dL per U)
+target: 140         # Target glucose (mg/dL)
+
+# ===== OPTIONAL: Model Parameters (uncomment to override defaults) =====
+# DIA: 300                    # Insulin duration (min), default 300
+# basal_max: 2.5             # Max basal rate (U/hr), default 2.5
+# max_bolus: 15.0            # Max bolus (U), default 15.0
+# iob_excess_threshold: 1.5  # IOB threshold (U), default 1.5
+# aggression_min: 0.2        # Min aggression factor, default 0.2
+
+# ===== OPTIONAL: Bergman HPC Settings (uncomment to customize) =====
+# bergman_enable: true              # Enable predictive control, default true
+# mpc_horizon: 30                   # Prediction horizon (min), default 30
+# mpc_immediate_fraction: 0.25      # Immediate bolus fraction, default 0.25
+# mpc_max_bolus: 1.0               # HPC bolus cap (U), default 1.0
+# iob_mpc_threshold: 3.0           # IOB gate for HPC (U), default 3.0
+
+# ===== OPTIONAL: Bergman Model Parameters (uncomment to customize) =====
+# p1: 0.028     # Glucose effectiveness
+# p2: 0.025     # Insulin action rate
+# p3: 0.00005   # Remote insulin effect coupling
+# n: 0.05       # Insulin clearance rate
+# Gb: 110       # Basal glucose (mg/dL)
+# Ib: 15        # Basal plasma insulin (μU/mL)
+# alpha: 300    # Insulin secretion capacity
