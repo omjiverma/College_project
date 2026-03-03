@@ -18,11 +18,13 @@
 
 # adolescent_014.yaml
 
-basal_nominal: 1.0
-CR: 25
+basal_nominal: 2.0
+CR: 20
 CF_base: 55
 target: 110
 
-mpc_horizon: 120
-mpc_u_max_cap: 0.6
+mpc_horizon: 90
+mpc_u_max_cap: 0.9
 max_bolus: 6.0
+
+
