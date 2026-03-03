@@ -70,7 +70,8 @@ class PatientLogger:
             return
         df = pd.DataFrame(self.data)
         df.to_csv(self.log_path, index=False)
-        print(f"Saved log → {self.log_path}")
+        # Avoid UnicodeEncodeError on Windows consoles with non-UTF8 code pages.
+        print(f"Saved log -> {self.log_path}")
 
     def get_summary(self) -> dict:
         """
