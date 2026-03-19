@@ -27,7 +27,7 @@ def main():
     }
     # Simulate each patient
     for name in patients:
-        if name in type['sensitive']:
+        if name in type['normal']:
             logger = PatientLogger(patient_name=name, save_path="results")
             result = runner.run_patient(name, logger, days=1, animate=False)
             logger.save()

@@ -9,7 +9,7 @@ from collections import deque
 
 
 class T1D_Fuzzy_Walsh_Controller(Controller):
-    def __init__(self, logger=None, dia=300.0, patient_type="sensitive"):
+    def __init__(self, logger=None, dia=300.0, patient_type="normal"):
         if patient_type not in ["normal", "sensitive", "resistant"]:
             raise ValueError("patient_type must be 'normal', 'sensitive', or 'resistant'")
 
@@ -184,7 +184,7 @@ class T1D_Fuzzy_Walsh_Controller(Controller):
         now = info.get("time", datetime.now())
         meal_cho = info.get("meal", 0.0)
         basal_nominal = info.get("basal_nominal", 1.0)
-        cr_nominal = info.get("CR", 12.0)
+        cr_nominal = info.get("CR", 8.0)
 
         self.cgm_history.append(raw_cgm)
         self.cho_history.append(meal_cho)
