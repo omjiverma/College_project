@@ -55,7 +55,7 @@ class SimulationRunner:
         env = T1DSimEnv(patient, sensor, pump, scenario)
 
         # Initialize controller
-        controller = self.controller_class(self.profile, logger=logger)
+        controller = self.controller_class(logger=logger)
 
         # Create simulation object
         sim_obj = SimObj(
