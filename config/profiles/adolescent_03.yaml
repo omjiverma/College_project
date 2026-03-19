@@ -1,0 +1,24 @@
+# adolescent_003.yaml - MINIMAL PROFILE
+
+# ===== REQUIRED: PID Tuning =====
+Kp: 0.005
+Ki: 0.000008
+Kd: 0.015
+
+# ===== REQUIRED: Core Insulin Settings =====
+basal_nominal: 0.1
+CR: 65
+CF_base: 70
+target: 180
+
+# ===== OPTIONAL: Override Defaults =====
+aggression_min: 0.1
+iob_excess_threshold: 1.0
+p1: 0.028
+p2: 0.025
+p3: 0.00005
+n: 0.05
+Gb: 110
+Ib: 15
+alpha: 300
+
