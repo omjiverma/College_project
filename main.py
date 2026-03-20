@@ -23,11 +23,11 @@ def main():
     type = {
         "normal" : ["adolescent#001","adolescent#004","adolescent#005","adolescent#006","adolescent#010"],
         "sensitive": ["adolescent#003","adolescent#009"],
-        "resistive": ["adolescent#002","adolescent#007","adolescent#008"]
+        "resistant": ["adolescent#002","adolescent#007","adolescent#008"]
     }
     # Simulate each patient
     for name in patients:
-        if name in type['normal']:
+        if name in type['resistant']:
             logger = PatientLogger(patient_name=name, save_path="results")
             result = runner.run_patient(name, logger, days=1, animate=False)
             logger.save()

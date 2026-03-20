@@ -9,7 +9,7 @@ from collections import deque
 
 
 class T1D_Fuzzy_Walsh_Controller(Controller):
-    def __init__(self, logger=None, dia=300.0, patient_type="normal"):
+    def __init__(self, logger=None, dia=300.0, patient_type="resistant"):
         if patient_type not in ["normal", "sensitive", "resistant"]:
             raise ValueError("patient_type must be 'normal', 'sensitive', or 'resistant'")
 
@@ -184,7 +184,7 @@ class T1D_Fuzzy_Walsh_Controller(Controller):
         now = info.get("time", datetime.now())
         meal_cho = info.get("meal", 0.0)
         basal_nominal = info.get("basal_nominal", 1.0)
-        cr_nominal = info.get("CR", 8.0)
+        cr_nominal = info.get("CR", 3.5)
 
         self.cgm_history.append(raw_cgm)
         self.cho_history.append(meal_cho)
@@ -263,7 +263,7 @@ class T1D_Fuzzy_Walsh_Controller(Controller):
 
 
         elif self.patient_type == "resistant":
-            safe_max_iob = (basal_nominal * 3.0) + 1.0 
+            safe_max_iob = (basal_nominal * 2.5) + 0.5 
             iob_percent = np.clip((current_iob / safe_max_iob) * 100.0, 0, 100)
             
             try:
@@ -275,11 +275,11 @@ class T1D_Fuzzy_Walsh_Controller(Controller):
             except Exception:
                 final_basal_mult = 0.0 if filtered_cgm < 100 else 1.0
 
-            if predicted_cgm < 140.0: 
+            if predicted_cgm < 110.0: 
                 final_basal_mult = 0.0
-            elif filtered_cgm < 150.0 and poly_rate < -0.5: 
+            elif filtered_cgm < 115.0 and poly_rate < -0.5: 
                 final_basal_mult = 0.0
-            elif sum(self.cho_history) > 20 and poly_rate < -0.5:
+            elif sum(self.cho_history) > 15 and poly_rate < -0.3:
                 final_basal_mult = 0.0 
 
             if poly_rate < -0.2 and current_iob > (safe_max_iob * 0.05):
@@ -298,23 +298,17 @@ class T1D_Fuzzy_Walsh_Controller(Controller):
         # Calculate standard basal step and meal bolus
         final_basal_mult = final_basal_mult * self.basal_adapt_factor
         basal_step = (basal_nominal * final_basal_mult / 60.0) * self.sample_time
-        if meal_cho > 0:
-            print("MEAL   :",meal_cho)
         bolus = (meal_cho / cr_nominal) if meal_cho > 0 else 0.0
 
         # ==================================================================
         # NEW: SUPER MICRO-BOLUS (SMB) LAYER
         # ==================================================================
         # 1. Higher trigger threshold (>180 instead of >170)
-        if bolus == 0.0 and filtered_cgm > 1780.0 and poly_rate > 0.5:
-            # 2. Stricter IOB Limit: Only fire if bucket is less than 30% full (was 60%)
+        if bolus==0 and filtered_cgm > 125.0 and poly_rate > 0.0:
             if current_iob < (safe_max_iob * 0.30):
-                # 3. Slightly smaller burst (20 minutes of basal instead of 30)
-                smb_dose = basal_nominal * 0.33 
+                smb_dose = basal_nominal * 1          # ← only 1× basal rate
                 bolus += smb_dose
-                
-                # 4. MUTUAL EXCLUSION: If we give an SMB, shut off the basal drip for this cycle
-                final_basal_mult = 0.0 
+                final_basal_mult = 0.0
                 
                 # Tag it in the logs
                 iob_model_log = f"SMB_{self.patient_type.upper()}"
