@@ -9,12 +9,12 @@ from collections import deque
 
 
 class T1D_Fuzzy_Walsh_Controller(Controller):
-    def __init__(self, logger=None, dia=300.0, patient_type="resistant"):
-        if patient_type not in ["normal", "sensitive", "resistant"]:
-            raise ValueError("patient_type must be 'normal', 'sensitive', or 'resistant'")
-
+    def __init__(self, logger=None, dia=300.0, patient_type="RESISTANT_ADOLESCENT"):
+        if patient_type not in ["NORMAL_ADOLESCENT", "SENSITIVE_ADOLESCENT", "RESISTANT_ADOLESCENT"]:
+            raise ValueError("patient_type must be 'NORMAL_ADOLESCENT', 'SENSITIVE_ADOLESCENT', or 'RESISTANT_ADOLESCENT'")
+        
         self.logger = logger
-        self.sample_time = 3.0
+        self.sample_time = 3.0 #min
         self.last_cgm = None
         self.patient_type = patient_type
 
@@ -49,7 +49,7 @@ class T1D_Fuzzy_Walsh_Controller(Controller):
         i = ctrl.Antecedent(univ_iob_pct, 'iob_pct')
         m = ctrl.Consequent(univ_mult, 'multiplier')
 
-        # COMMON VARIABLES
+        # COMMON VARIABLES FOR ALL PROFILES
         t['rapid_fall'] = fuzzy.trapmf(univ_trend, [-12, -12, -5.0, -3.0])
         t['falling']    = fuzzy.trimf(univ_trend, [-4.0, -1.5, -0.5])
         t['stable']     = fuzzy.trimf(univ_trend, [-0.8, 0, 0.8])
@@ -61,7 +61,7 @@ class T1D_Fuzzy_Walsh_Controller(Controller):
         i['moderate'] = fuzzy.trimf(univ_iob_pct, [50, 70, 85])
         i['high']     = fuzzy.trapmf(univ_iob_pct, [80, 95, 100, 100])
 
-        if self.patient_type == "normal":
+        if self.patient_type == "NORMAL_ADOLESCENT":
             g['severe_low'] = fuzzy.trapmf(univ_glucose, [30, 30, 75, 90])
             g['low']        = fuzzy.trimf(univ_glucose, [90, 100, 115])
             g['target']     = fuzzy.trimf(univ_glucose, [110, 130, 165])
@@ -87,7 +87,7 @@ class T1D_Fuzzy_Walsh_Controller(Controller):
                 ctrl.Rule(g['high'] & t['falling'], m['low']),
             ]
 
-        elif self.patient_type == "sensitive":
+        elif self.patient_type == "SENSITIVE_ADOLESCENT":
             g['severe_low'] = fuzzy.trapmf(univ_glucose, [30, 30, 85, 105])
             g['low']        = fuzzy.trimf(univ_glucose, [95, 115, 135])
             g['target']     = fuzzy.trimf(univ_glucose, [125, 150, 190]) 
@@ -111,7 +111,7 @@ class T1D_Fuzzy_Walsh_Controller(Controller):
                 ctrl.Rule(g['target'] & t['stable'] & i['very_low'], m['normal']),
             ]
 
-        elif self.patient_type == "resistant":
+        elif self.patient_type == "RESISTANT_ADOLESCENT":
             g['severe_low'] = fuzzy.trapmf(univ_glucose, [30, 30, 75, 95])
             g['low']        = fuzzy.trimf(univ_glucose, [85, 105, 125])
             g['target']     = fuzzy.trimf(univ_glucose, [115, 135, 160]) 
@@ -179,12 +179,23 @@ class T1D_Fuzzy_Walsh_Controller(Controller):
     def policy(self, observation, reward=None, done=None, **info):
         if info.get("new_episode", False):
             self.reset()
-
+        
         raw_cgm = float(observation.CGM)
         now = info.get("time", datetime.now())
         meal_cho = info.get("meal", 0.0)
-        basal_nominal = info.get("basal_nominal", 1.0)
-        cr_nominal = info.get("CR", 3.5)
+        basal_nominal = 1.0
+        if self.patient_type == "NORMAL_ADOLESCENT":
+            cr_nominal = 8.0
+            smb_threshold = 170.0
+            smb_scaler = 0.5
+        elif self.patient_type == "SENSITIVE_ADOLESCENT":
+            cr_nominal = 12.0
+            smb_threshold = 170.0
+            smb_scaler = 0.33
+        elif self.patient_type == "RESISTANT_ADOLESCENT":
+            cr_nominal = 4.0
+            smb_threshold = 150.0
+            smb_scaler = 0.5
 
         self.cgm_history.append(raw_cgm)
         self.cho_history.append(meal_cho)
@@ -203,8 +214,8 @@ class T1D_Fuzzy_Walsh_Controller(Controller):
         # ------------------------------------------------------------------
         # ISOLATED SAFETY LAYERS
         # ------------------------------------------------------------------
-        if self.patient_type == "normal":
-            safe_max_iob = (basal_nominal * 2.5) + 0.3 
+        if self.patient_type == "NORMAL_ADOLESCENT":
+            safe_max_iob = (basal_nominal * 2.2) + 0.3
             iob_percent = np.clip((current_iob / safe_max_iob) * 100.0, 0, 100)
             
             try:
@@ -231,7 +242,7 @@ class T1D_Fuzzy_Walsh_Controller(Controller):
                     final_basal_mult = max(final_basal_mult, 1.8)
 
 
-        elif self.patient_type == "sensitive":
+        elif self.patient_type == "SENSITIVE_ADOLESCENT":
             safe_max_iob = (basal_nominal * 1.8) + 0.1 
             iob_percent = np.clip((current_iob / safe_max_iob) * 100.0, 0, 100)
             
@@ -262,8 +273,8 @@ class T1D_Fuzzy_Walsh_Controller(Controller):
                     final_basal_mult = max(final_basal_mult, 1.2)
 
 
-        elif self.patient_type == "resistant":
-            safe_max_iob = (basal_nominal * 2.5) + 0.5 
+        elif self.patient_type == "RESISTANT_ADOLESCENT":
+            safe_max_iob = (basal_nominal * 2.0) + 0.1 
             iob_percent = np.clip((current_iob / safe_max_iob) * 100.0, 0, 100)
             
             try:
@@ -275,20 +286,22 @@ class T1D_Fuzzy_Walsh_Controller(Controller):
             except Exception:
                 final_basal_mult = 0.0 if filtered_cgm < 100 else 1.0
 
-            if predicted_cgm < 110.0: 
+            if predicted_cgm < 140.0 and poly_rate < -0.1: 
                 final_basal_mult = 0.0
-            elif filtered_cgm < 115.0 and poly_rate < -0.5: 
+                print(f"SAFETY OVERRIDE: PREDICTED CGM={predicted_cgm:.1f}, Trend={poly_rate:.2f} → ZEROING BASAL")
+            elif filtered_cgm < 120.0 and poly_rate < 0.0: 
                 final_basal_mult = 0.0
+                print(f"SAFETY OVERRIDE: FILTERED CGM={filtered_cgm:.1f}, Trend={poly_rate:.2f} → ZEROING BASAL")
             elif sum(self.cho_history) > 15 and poly_rate < -0.3:
                 final_basal_mult = 0.0 
 
-            if poly_rate < -0.2 and current_iob > (safe_max_iob * 0.05):
+            if poly_rate < 0 and current_iob > (safe_max_iob * 0.05):
                 final_basal_mult = 0.0
 
             if filtered_cgm > 180.0 and poly_rate > 0.0:
                 final_basal_mult = max(final_basal_mult, 2.0) 
 
-            if self.time_in_high > 30 and current_iob < safe_max_iob:
+            if self.time_in_high > 20 and current_iob < safe_max_iob:
                 if len(self.cgm_history) >= 10 and np.mean(list(self.cgm_history)[-10:]) > 200.0:
                     if poly_rate > -0.1: 
                         final_basal_mult = max(final_basal_mult, 3.0) 
@@ -303,14 +316,18 @@ class T1D_Fuzzy_Walsh_Controller(Controller):
         # ==================================================================
         # NEW: SUPER MICRO-BOLUS (SMB) LAYER
         # ==================================================================
-        # 1. Higher trigger threshold (>180 instead of >170)
-        if bolus==0 and filtered_cgm > 125.0 and poly_rate > 0.0:
-            if current_iob < (safe_max_iob * 0.30):
-                smb_dose = basal_nominal * 1          # ← only 1× basal rate
+        if bolus==0 and filtered_cgm > smb_threshold and poly_rate > 0.0:
+            if current_iob < (safe_max_iob * 0.40):
+                smb_dose = basal_nominal * smb_scaler 
                 bolus += smb_dose
                 final_basal_mult = 0.0
-                
-                # Tag it in the logs
+                print(f"SMB TRIGGERED: CGM={filtered_cgm:.1f}, Trend={poly_rate:.2f}, IOB={current_iob:.2f}U → SMB={smb_dose:.2f}U")
+                iob_model_log = f"SMB_{self.patient_type.upper()}"
+            elif bolus > 0 and filtered_cgm > smb_threshold + 30 and poly_rate > 0.5:
+                smb_dose = basal_nominal * smb_scaler * 2
+                bolus += smb_dose
+                final_basal_mult = 0.0
+                print(f"SMB TRIGGERED: CGM={filtered_cgm:.1f}, Trend={poly_rate:.2f}, IOB={current_iob:.2f}U → SMB={smb_dose:.2f}U")
                 iob_model_log = f"SMB_{self.patient_type.upper()}"
             else:
                 iob_model_log = f"ISO_FUZZY_{self.patient_type.upper()}"
@@ -337,6 +354,7 @@ class T1D_Fuzzy_Walsh_Controller(Controller):
                 trend=poly_rate,
                 target=120.0,
                 filtered_cgm=filtered_cgm,
+                predicted_cgm=predicted_cgm,
                 basal_adapt=self.basal_adapt_factor
             )
 

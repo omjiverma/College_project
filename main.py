@@ -20,14 +20,14 @@ def main():
     # Patient list
     patients = [f"adolescent#{i:03d}" for i in range(1,11)]
     summary_rows = []
-    type = {
-        "normal" : ["adolescent#001","adolescent#004","adolescent#005","adolescent#006","adolescent#010"],
-        "sensitive": ["adolescent#003","adolescent#009"],
-        "resistant": ["adolescent#002","adolescent#007","adolescent#008"]
+    patients_types = {
+        "NORMAL_ADOLESCENT": ["adolescent#001","adolescent#004","adolescent#005","adolescent#006","adolescent#010"],
+        "SENSITIVE_ADOLESCENT": ["adolescent#003","adolescent#009"],
+        "RESISTANT_ADOLESCENT": ["adolescent#002","adolescent#007","adolescent#008"]
     }
     # Simulate each patient
     for name in patients:
-        if name in type['resistant']:
+        if name in patients_types['RESISTANT_ADOLESCENT']:
             logger = PatientLogger(patient_name=name, save_path="results")
             result = runner.run_patient(name, logger, days=1, animate=False)
             logger.save()
@@ -48,15 +48,12 @@ if __name__ == "__main__":
     main()
 
 
-# insulin-sensitive patients(hypo-prone like #003, #005, #007)
-
-# normal / average patients(#001,#004,#005,#006,#010)
+# NORMAL ADOLESCENT: 001,004,005,006,010
 # ================================================================================
 #        Patient  TIR_70_180 (%)  <70 (%)  <54 (%)  >180 (%)  >250 (%)  Mean_BG  CV_%  Total_Basal_U  Total_Bolus_U
-# adolescent_001            99.6      0.4      0.0       0.0       0.0    117.6  17.4           11.1            6.9
-# adolescent_004            90.0      6.7      0.8       3.3       0.0    120.5  27.9           11.2            6.9
-# adolescent_005            76.9      9.0      4.2      14.2       3.1    127.7  39.6           12.4            6.9
-# adolescent_006            90.8      0.0      0.0       9.2       0.0    138.3  19.5           14.4            6.9
-# adolescent_010            95.2      4.4      0.0       0.4       0.0    113.5  26.0            9.3            6.9
+# adolescent_001            99.4      0.5      0.0       0.1       0.0    121.3  15.9           49.9           55.1
+# adolescent_004            93.3      1.4      0.0       5.3       0.0    129.4  23.0           46.1           55.1
+# adolescent_005            81.5      3.1      0.4      15.4       0.9    132.6  31.1           46.7           55.1
+# adolescent_006            93.5      0.0      0.0       6.5       0.0    145.5  14.9           66.7           55.1
+# adolescent_010            98.0      0.5      0.0       1.5       0.0    117.5  19.8           44.4           55.1
 # ================================================================================
-# insulin-resistant patients (hyper-prone like #002, #008)
