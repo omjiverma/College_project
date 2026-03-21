@@ -13,18 +13,21 @@ def main():
     runner = SimulationRunner(Fuzzy, results_dir="results")
 
     # Patient list
-    patients = [f"adolescent#{i:03d}" for i in range(1,11)]
+    patients = [f"adult#{i:03d}" for i in range(1,11)]
     summary_rows = []
     patients_types = {
         "NORMAL_ADOLESCENT": ["adolescent#001","adolescent#004","adolescent#005","adolescent#006","adolescent#010"],
         "SENSITIVE_ADOLESCENT": ["adolescent#003","adolescent#009"],
-        "RESISTANT_ADOLESCENT": ["adolescent#002","adolescent#007","adolescent#008"]
+        "RESISTANT_ADOLESCENT": ["adolescent#002","adolescent#007","adolescent#008"],
+        "NORMAL_ADULT": ["adult#001", "adult#002","adult#003", "adult#008"],
+        "SENSITIVE_ADULT": ["adult#004", "adult#007"],
+        "RESISTANT_ADULT": ["adult#005", "adult#006", "adult#009", "adult#010"]
     }
     # Simulate each patient
     for name in patients:
-        if name in patients_types['SENSITIVE_ADOLESCENT']:
+        if name not in patients_types['NORMAL_ADOLESCENT']:
             logger = PatientLogger(patient_name=name, save_path="results")
-            result = runner.run_patient(name, logger, days=7, animate=False)
+            result = runner.run_patient(name, logger, days=2, animate=False)
             logger.save()
             summary_rows.append(logger.get_summary())
 

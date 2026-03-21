@@ -9,9 +9,9 @@ from collections import deque
 
 
 class T1D_Fuzzy_Walsh_Controller(Controller):
-    def __init__(self, logger=None, dia=300.0, patient_type="SENSITIVE_ADOLESCENT"):
-        if patient_type not in ["NORMAL_ADOLESCENT", "SENSITIVE_ADOLESCENT", "RESISTANT_ADOLESCENT"]:
-            raise ValueError("patient_type must be 'NORMAL_ADOLESCENT', 'SENSITIVE_ADOLESCENT', or 'RESISTANT_ADOLESCENT'")
+    def __init__(self, logger=None, dia=300.0, patient_type="NORMAL_ADULT"):
+        if patient_type not in ["NORMAL_ADOLESCENT", "SENSITIVE_ADOLESCENT", "RESISTANT_ADOLESCENT", "NORMAL_ADULT"]:
+            raise ValueError("patient_type must be 'NORMAL_ADOLESCENT', 'SENSITIVE_ADOLESCENT', 'RESISTANT_ADOLESCENT', or 'NORMAL_ADULT'")
         
         self.logger = logger
         self.sample_time = 3.0 #min
@@ -138,6 +138,32 @@ class T1D_Fuzzy_Walsh_Controller(Controller):
                 ctrl.Rule(g['high'] & t['falling'], m['low']),
             ]
 
+        elif self.patient_type == "NORMAL_ADULT":
+            g['severe_low'] = fuzzy.trapmf(univ_glucose, [30, 30, 75, 90])
+            g['low']        = fuzzy.trimf(univ_glucose, [90, 100, 115])
+            g['target']     = fuzzy.trimf(univ_glucose, [110, 130, 165])
+            g['high']       = fuzzy.trimf(univ_glucose, [150, 200, 260])
+            g['very_high']  = fuzzy.trapmf(univ_glucose, [240, 300, 400, 400])
+
+            m['zero']     = fuzzy.trimf(univ_mult, [0.00, 0.00, 0.10])
+            m['very_low'] = fuzzy.trimf(univ_mult, [0.05, 0.20, 0.60])
+            m['low']      = fuzzy.trimf(univ_mult, [0.20, 0.60, 1.00])
+            m['normal']   = fuzzy.trimf(univ_mult, [0.60, 1.00, 1.80])
+            m['elevated'] = fuzzy.trimf(univ_mult, [1.00, 1.60, 2.40])
+            m['high']     = fuzzy.trimf(univ_mult, [1.80, 2.40, 3.20])
+
+            rules = [
+                ctrl.Rule(g['severe_low'] | g['low'], m['zero']),
+                ctrl.Rule((t['rapid_fall'] | t['falling']) & g['target'], m['zero']),
+                ctrl.Rule(i['high'], m['zero']),
+                ctrl.Rule(i['moderate'] & ~g['very_high'], m['very_low']),
+                ctrl.Rule(g['very_high'] & t['rapid_rise'], m['high']),
+                ctrl.Rule(g['very_high'] & i['very_low'], m['elevated']),
+                ctrl.Rule(g['high'] & t['rising'] & i['very_low'], m['elevated']),
+                ctrl.Rule(g['target'] & t['stable'] & i['very_low'], m['normal']),
+                ctrl.Rule(g['high'] & t['falling'], m['low']),
+            ]
+
         return ctrl.ControlSystemSimulation(ctrl.ControlSystem(rules))
 
     def reset(self):
@@ -195,6 +221,10 @@ class T1D_Fuzzy_Walsh_Controller(Controller):
         elif self.patient_type == "RESISTANT_ADOLESCENT":
             cr_nominal = 4.0
             smb_threshold = 150.0
+            smb_scaler = 0.5
+        elif self.patient_type == "NORMAL_ADULT":
+            cr_nominal = 7.0
+            smb_threshold = 170.0
             smb_scaler = 0.5
 
         self.cgm_history.append(raw_cgm)
@@ -305,6 +335,33 @@ class T1D_Fuzzy_Walsh_Controller(Controller):
                 if len(self.cgm_history) >= 10 and np.mean(list(self.cgm_history)[-10:]) > 200.0:
                     if poly_rate > -0.1: 
                         final_basal_mult = max(final_basal_mult, 3.0) 
+
+        elif self.patient_type == "NORMAL_ADULT":
+            safe_max_iob = (basal_nominal * 3) + 0.3
+            iob_percent = np.clip((current_iob / safe_max_iob) * 100.0, 0, 100)
+            
+            try:
+                self.flc.input['glucose'] = np.clip(filtered_cgm, 30, 400)
+                self.flc.input['trend']   = trend_clipped
+                self.flc.input['iob_pct'] = iob_percent
+                self.flc.compute()
+                final_basal_mult = float(self.flc.output['multiplier'])
+            except Exception:
+                final_basal_mult = 0.0 if filtered_cgm < 100 else 1.0
+
+            if predicted_cgm < 110.0:
+                final_basal_mult = 0.0
+            elif filtered_cgm < 115.0 and poly_rate < -1.0:
+                final_basal_mult = 0.0
+            elif sum(self.cho_history) > 20 and poly_rate < -1.0:
+                final_basal_mult = 0.0 
+
+            if poly_rate < -1.0 and current_iob > (safe_max_iob * 0.25):
+                final_basal_mult = 0.0
+
+            if self.time_in_high > self.time_high_force_threshold and current_iob < safe_max_iob:
+                if len(self.cgm_history) >= 10 and np.mean(list(self.cgm_history)[-10:]) > 200.0:
+                    final_basal_mult = max(final_basal_mult, 1.8)
 
         # ------------------------------------------------------------------
 
