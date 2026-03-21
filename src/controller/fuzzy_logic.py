@@ -9,7 +9,7 @@ from collections import deque
 
 
 class T1D_Fuzzy_Walsh_Controller(Controller):
-    def __init__(self, logger=None, dia=300.0, patient_type="RESISTANT_ADOLESCENT"):
+    def __init__(self, logger=None, dia=300.0, patient_type="SENSITIVE_ADOLESCENT"):
         if patient_type not in ["NORMAL_ADOLESCENT", "SENSITIVE_ADOLESCENT", "RESISTANT_ADOLESCENT"]:
             raise ValueError("patient_type must be 'NORMAL_ADOLESCENT', 'SENSITIVE_ADOLESCENT', or 'RESISTANT_ADOLESCENT'")
         

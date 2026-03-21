@@ -1,9 +1,5 @@
-# main.py
-"""Main entry point for T1D simulation."""
-import yaml
 import pandas as pd
-from datetime import datetime
-from src.controller import T1DControllerWalsh,Fuzzy,T1DControllerHybridMPC
+from src.controller import Fuzzy
 from src.simulation import SimulationRunner
 from src.utils import PatientLogger
 
@@ -11,11 +7,10 @@ from src.utils import PatientLogger
 def main():
     """Run T1D simulation for configured patients."""
     # Load profile
-    with open("config/profiles/adolescent_014.yaml") as f:
-        PROFILE = yaml.safe_load(f)
     # Initialize runner
     # runner = SimulationRunner(T1DControllerWalsh, PROFILE, results_dir="results")
-    runner = SimulationRunner(Fuzzy, PROFILE, results_dir="results")
+ 
+    runner = SimulationRunner(Fuzzy, results_dir="results")
 
     # Patient list
     patients = [f"adolescent#{i:03d}" for i in range(1,11)]
@@ -27,9 +22,9 @@ def main():
     }
     # Simulate each patient
     for name in patients:
-        if name in patients_types['RESISTANT_ADOLESCENT']:
+        if name in patients_types['SENSITIVE_ADOLESCENT']:
             logger = PatientLogger(patient_name=name, save_path="results")
-            result = runner.run_patient(name, logger, days=1, animate=False)
+            result = runner.run_patient(name, logger, days=7, animate=False)
             logger.save()
             summary_rows.append(logger.get_summary())
 

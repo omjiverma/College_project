@@ -17,7 +17,7 @@ from typing import Type
 class SimulationRunner:
     """Orchestrates T1D simulation runs for patients."""
 
-    def __init__(self, controller_class: Type, profile: dict, results_dir: str = "results"):
+    def __init__(self, controller_class: Type, results_dir: str = "results"):
         """
         Initialize simulation runner.
         
@@ -27,7 +27,6 @@ class SimulationRunner:
             results_dir: Directory for saving results
         """
         self.controller_class = controller_class
-        self.profile = profile
         self.results_dir = results_dir
 
     def run_patient(self, patient_name: str, logger: PatientLogger = None, 
@@ -48,11 +47,11 @@ class SimulationRunner:
         patient = T1DPatient.withName(patient_name)
         sensor = CGMSensor.withName('Dexcom', seed=10)
         pump = InsulinPump.withName('Insulet')
-        # scenario = create_fixed_meal_scenario(start_time=datetime(2025, 1, 1), days=days)
-        scenario = RandomScenario(start_time=datetime(2025, 1, 1), seed=1)
+        custom_scenario = create_fixed_meal_scenario(start_time=datetime(2025, 1, 1), days=days)
+        random_scenario = RandomScenario(start_time=datetime(2025, 1, 1), seed=1)
 
         # Create environment
-        env = T1DSimEnv(patient, sensor, pump, scenario)
+        env = T1DSimEnv(patient, sensor, pump, random_scenario)
 
         # Initialize controller
         controller = self.controller_class(logger=logger)
