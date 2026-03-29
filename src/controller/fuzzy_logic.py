@@ -9,7 +9,7 @@ from collections import deque
 
 
 class T1D_Fuzzy_Walsh_Controller(Controller):
-    def __init__(self, logger=None, dia=300.0, patient_type="NORMAL_ADULT"):
+    def __init__(self, logger=None, dia=300.0, patient_type="NORMAL_ADOLESCENT"):
         if patient_type not in ["NORMAL_ADOLESCENT", "SENSITIVE_ADOLESCENT", "RESISTANT_ADOLESCENT", "NORMAL_ADULT"]:
             raise ValueError("patient_type must be 'NORMAL_ADOLESCENT', 'SENSITIVE_ADOLESCENT', 'RESISTANT_ADOLESCENT', or 'NORMAL_ADULT'")
         
@@ -402,7 +402,7 @@ class T1D_Fuzzy_Walsh_Controller(Controller):
                 step=info.get("step", 0),
                 time=now,
                 cgm=raw_cgm,
-                basal=basal_nominal * final_basal_mult,
+                basal=basal_step,
                 bolus=bolus,
                 iob=current_iob,
                 iob_model=iob_model_log, # Will show "SMB_..." if fired
@@ -412,7 +412,6 @@ class T1D_Fuzzy_Walsh_Controller(Controller):
                 target=120.0,
                 filtered_cgm=filtered_cgm,
                 predicted_cgm=predicted_cgm,
-                basal_adapt=self.basal_adapt_factor
             )
 
         return Action(basal=basal_step, bolus=bolus)

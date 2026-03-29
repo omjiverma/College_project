@@ -1,5 +1,6 @@
 import pandas as pd
 from src.controller import Fuzzy
+from src.controller.esp32_controller import ESP32_Controller
 from src.simulation import SimulationRunner
 from src.utils import PatientLogger
 
@@ -13,7 +14,7 @@ def main():
     runner = SimulationRunner(Fuzzy, results_dir="results")
 
     # Patient list
-    patients = [f"adult#{i:03d}" for i in range(1,11)]
+    patients = [f"adolescent#{i:03d}" for i in range(1,11)]
     summary_rows = []
     patients_types = {
         "NORMAL_ADOLESCENT": ["adolescent#001","adolescent#004","adolescent#005","adolescent#006","adolescent#010"],
@@ -25,9 +26,9 @@ def main():
     }
     # Simulate each patient
     for name in patients:
-        if name not in patients_types['NORMAL_ADOLESCENT']:
+        if name in patients_types['NORMAL_ADOLESCENT']:
             logger = PatientLogger(patient_name=name, save_path="results")
-            result = runner.run_patient(name, logger, days=2, animate=False)
+            result = runner.run_patient(name, logger, days=7, animate=False)
             logger.save()
             summary_rows.append(logger.get_summary())
 

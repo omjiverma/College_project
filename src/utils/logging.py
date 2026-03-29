@@ -33,7 +33,7 @@ class PatientLogger:
             step: Step number
             time: Datetime of step
             cgm: CGM glucose reading (mg/dL)
-            basal: Basal rate delivered (U/hr)
+            basal: Basal delivered this step (U)
             bolus: Bolus delivered (U)
             iob: Insulin on board (U)
             iob_model: IOB model name
@@ -51,6 +51,7 @@ class PatientLogger:
             "time": time.strftime("%Y-%m-%d %H:%M"),
             "minutes_from_start": (time - self.start_time).total_seconds()/60,
             "CGM": round(cgm, 1),
+            # Basal is logged as the amount delivered per step (U), not U/hr.
             "basal_rate": round(basal, 5),
             "bolus": round(bolus, 4),
             "IOB": round(iob, 3),
@@ -95,6 +96,7 @@ class PatientLogger:
             ">250 (%)": round((bg>250).mean()*100, 2),
             "Mean_BG": round(bg.mean(), 1),
             "CV_%": round(bg.std()/bg.mean()*100, 1),
-            "Total_Basal_U": round(df["basal_rate"].sum()*5/60, 3),
+            # Basal is already per-step units, so total basal is the sum.
+            "Total_Basal_U": round(df["basal_rate"].sum(), 3),
             "Total_Bolus_U": round(df["bolus"].sum(), 3),
         }
