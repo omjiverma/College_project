@@ -15,7 +15,6 @@ class ESP32_Controller(Controller):
 
         # Open Bluetooth serial connection
         self.ser = serial.Serial(self.port, self.baud, timeout=5)
-        wait(10)
         print(f"Connected to ESP32 on {self.port} (baud={self.baud})")
 
         self.reset()
@@ -66,6 +65,11 @@ class ESP32_Controller(Controller):
         # No control logic yet
         basal = data.get("basal", 0.0)
         bolus = data.get("bolus", 0.0)
+        filtered_cgm = data.get("filtered_cgm", 0)
+        predicted_cgm = data.get("predicted_cgm", 0)
+        trend = data.get("trend", 0)
+        iob = data.get("iob", 0)
+        final_basal_mult = data.get("final_basal_mult", 0)
 
         if self.logger:
             self.logger.log_step(
@@ -74,12 +78,14 @@ class ESP32_Controller(Controller):
                 cgm=raw_cgm,
                 basal=basal,
                 bolus=bolus,
-                iob=0.0,
+                iob=iob,
                 iob_model="ESP32",
                 cho=meal_cho,
-                aggression=1.0,
-                trend=0.0,
+                aggression=final_basal_mult,
+                trend=trend,
                 target=120.0,
+                filtered_cgm=filtered_cgm,
+                predicted_cgm=predicted_cgm,
                 esp32_response=bool(data)
             )
 

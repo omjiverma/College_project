@@ -9,7 +9,8 @@ from collections import deque
 
 
 class T1D_Fuzzy_Walsh_Controller(Controller):
-    def __init__(self, logger=None, dia=300.0, patient_type="NORMAL_ADOLESCENT"):
+
+    def __init__(self, logger=None, dia=300.0, patient_type="RESISTANT_ADOLESCENT"):
         if patient_type not in ["NORMAL_ADOLESCENT", "SENSITIVE_ADOLESCENT", "RESISTANT_ADOLESCENT", "NORMAL_ADULT"]:
             raise ValueError("patient_type must be 'NORMAL_ADOLESCENT', 'SENSITIVE_ADOLESCENT', 'RESISTANT_ADOLESCENT', or 'NORMAL_ADULT'")
         
@@ -114,26 +115,27 @@ class T1D_Fuzzy_Walsh_Controller(Controller):
         elif self.patient_type == "RESISTANT_ADOLESCENT":
             g['severe_low'] = fuzzy.trapmf(univ_glucose, [30, 30, 75, 95])
             g['low']        = fuzzy.trimf(univ_glucose, [85, 105, 125])
-            g['target']     = fuzzy.trimf(univ_glucose, [115, 135, 160]) 
-            g['high']       = fuzzy.trimf(univ_glucose, [140, 180, 230]) 
-            g['very_high']  = fuzzy.trapmf(univ_glucose, [200, 250, 400, 400]) 
+            g['target']     = fuzzy.trimf(univ_glucose, [105, 125, 150]) 
+            g['high']       = fuzzy.trimf(univ_glucose, [130, 170, 210]) 
+            g['very_high']  = fuzzy.trapmf(univ_glucose, [190, 235, 400, 400]) 
 
-            m['zero']     = fuzzy.trimf(univ_mult, [0.00, 0.00, 0.10])
-            m['very_low'] = fuzzy.trimf(univ_mult, [0.05, 0.30, 0.70])
-            m['low']      = fuzzy.trimf(univ_mult, [0.40, 0.80, 1.20])
-            m['normal']   = fuzzy.trimf(univ_mult, [0.90, 1.30, 2.00])
-            m['elevated'] = fuzzy.trimf(univ_mult, [1.50, 2.40, 3.20])
-            m['high']     = fuzzy.trimf(univ_mult, [2.50, 3.50, 4.50]) 
+            m['zero']     = fuzzy.trimf(univ_mult, [0.00, 0.00, 0.15])
+            m['very_low'] = fuzzy.trimf(univ_mult, [0.10, 0.30, 0.70])
+            m['low']      = fuzzy.trimf(univ_mult, [0.50, 0.95, 1.35])
+            m['normal']   = fuzzy.trimf(univ_mult, [1.00, 1.60, 2.20])
+            m['elevated'] = fuzzy.trimf(univ_mult, [1.80, 2.70, 3.60])
+            m['high']     = fuzzy.trimf(univ_mult, [2.80, 4.00, 5.00]) 
 
             rules = [
                 ctrl.Rule(g['severe_low'] | g['low'], m['zero']),
-                ctrl.Rule((t['rapid_fall'] | t['falling']) & g['target'], m['zero']),
-                ctrl.Rule(i['high'] & ~g['very_high'], m['zero']),
-                ctrl.Rule(i['high'] & g['very_high'], m['very_low']), 
-                ctrl.Rule(i['moderate'] & ~g['high'] & ~g['very_high'], m['very_low']),
+                ctrl.Rule((t['rapid_fall'] | t['falling']) & (g['target'] | g['low']), m['zero']),
+                ctrl.Rule(i['high'] & ~g['very_high'], m['very_low']),
+                ctrl.Rule(i['high'] & g['very_high'], m['low']), 
+                ctrl.Rule(i['moderate'] & ~g['high'] & ~g['very_high'], m['low']),
                 ctrl.Rule(g['very_high'] & t['rapid_rise'], m['high']),
                 ctrl.Rule(g['very_high'] & ~i['high'], m['elevated']),
                 ctrl.Rule(g['high'] & t['rising'] & ~i['high'], m['elevated']),
+                ctrl.Rule(g['high'] & t['stable'] & i['very_low'], m['normal']),
                 ctrl.Rule(g['target'] & t['stable'] & i['very_low'], m['normal']),
                 ctrl.Rule(g['high'] & t['falling'], m['low']),
             ]
@@ -304,7 +306,7 @@ class T1D_Fuzzy_Walsh_Controller(Controller):
 
 
         elif self.patient_type == "RESISTANT_ADOLESCENT":
-            safe_max_iob = (basal_nominal * 2.0) + 0.1 
+            safe_max_iob = (basal_nominal * 1.8) + 0.1  # more aggressive pressure for insulin demand
             iob_percent = np.clip((current_iob / safe_max_iob) * 100.0, 0, 100)
             
             try:
@@ -316,25 +318,33 @@ class T1D_Fuzzy_Walsh_Controller(Controller):
             except Exception:
                 final_basal_mult = 0.0 if filtered_cgm < 100 else 1.0
 
-            if predicted_cgm < 140.0 and poly_rate < -0.1: 
+            # Overshoot control and overly conservative lockout removal for resistant group
+            if predicted_cgm < 140.0 and poly_rate < -0.1:
                 final_basal_mult = 0.0
-                print(f"SAFETY OVERRIDE: PREDICTED CGM={predicted_cgm:.1f}, Trend={poly_rate:.2f} → ZEROING BASAL")
-            elif filtered_cgm < 120.0 and poly_rate < 0.0: 
+            elif filtered_cgm < 120.0 and poly_rate < 0.0:
                 final_basal_mult = 0.0
-                print(f"SAFETY OVERRIDE: FILTERED CGM={filtered_cgm:.1f}, Trend={poly_rate:.2f} → ZEROING BASAL")
             elif sum(self.cho_history) > 15 and poly_rate < -0.3:
-                final_basal_mult = 0.0 
-
-            if poly_rate < 0 and current_iob > (safe_max_iob * 0.05):
                 final_basal_mult = 0.0
 
-            if filtered_cgm > 180.0 and poly_rate > 0.0:
-                final_basal_mult = max(final_basal_mult, 2.0) 
+            if poly_rate < 0 and current_iob > (safe_max_iob * 0.08):
+                final_basal_mult = 0.0
 
-            if self.time_in_high > 20 and current_iob < safe_max_iob:
+            if filtered_cgm >= 180.0 and poly_rate > 0.0 and current_iob < safe_max_iob:
+                final_basal_mult = max(final_basal_mult, 2.4)   # stronger push for resistant hyper
+
+            if self.time_in_high > 16 and current_iob < safe_max_iob:
                 if len(self.cgm_history) >= 10 and np.mean(list(self.cgm_history)[-10:]) > 200.0:
-                    if poly_rate > -0.1: 
-                        final_basal_mult = max(final_basal_mult, 3.0) 
+                    if poly_rate > -0.2:
+                        final_basal_mult = max(final_basal_mult, 3.4)
+
+            # Give the resistant group a gentler hypoglycemia safety zone (less aggressive torque-down)
+            if filtered_cgm < 80.0 and current_iob < (safe_max_iob * 0.15):
+                final_basal_mult = min(final_basal_mult, 0.15)
+
+            # Clamp to safe range preventing runaway multiplier
+            final_basal_mult = np.clip(final_basal_mult, 0.0, 5.0)
+
+            # A secondary 
 
         elif self.patient_type == "NORMAL_ADULT":
             safe_max_iob = (basal_nominal * 3) + 0.3
